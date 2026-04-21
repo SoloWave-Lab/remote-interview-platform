@@ -1,23 +1,41 @@
+'use client';
+
 import { useCall, useCallStateHooks } from "@stream-io/video-react-sdk";
-import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
-import { api } from "../../convex/_generated/api";
 import { Button } from "./ui/button";
 import toast from "react-hot-toast";
+import { useEffect, useState } from "react";
+import { getInterviewByStreamCallId, updateInterviewStatus } from "@/lib/actions/interview";
 
 function EndCallButton() {
   const call = useCall();
   const router = useRouter();
   const { useLocalParticipant } = useCallStateHooks();
   const localParticipant = useLocalParticipant();
+  const [interview, setInterview] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const updateInterviewStatus = useMutation(api.interviews.updateInterviewStatus);
+  useEffect(() => {
+    if (!call?.id) {
+      setLoading(false);
+      return;
+    }
 
-  const interview = useQuery(api.interviews.getInterviewByStreamCallId, {
-    streamCallId: call?.id || "",
-  });
+    const fetchInterview = async () => {
+      try {
+        const data = await getInterviewByStreamCallId(call.id);
+        setInterview(data);
+      } catch (error) {
+        console.error("Failed to fetch interview:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  if (!call || !interview) return null;
+    fetchInterview();
+  }, [call?.id]);
+
+  if (!call || !interview || loading) return null;
 
   const isMeetingOwner = localParticipant?.userId === call.state.createdBy?.id;
 
@@ -27,10 +45,7 @@ function EndCallButton() {
     try {
       await call.endCall();
 
-      await updateInterviewStatus({
-        id: interview._id,
-        status: "completed",
-      });
+      await updateInterviewStatus(interview.id, "completed");
 
       router.push("/");
       toast.success("Meeting ended for everyone");

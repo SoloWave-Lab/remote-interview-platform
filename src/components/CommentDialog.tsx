@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { Id } from "../../convex/_generated/dataModel";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
+'use client';
+
+import { useState, useEffect } from "react";
+import { addComment, getComments } from "@/lib/actions/comment";
+import { getUsers } from "@/lib/actions/user";
 import toast from "react-hot-toast";
 import { MessageSquareIcon, StarIcon } from "lucide-react";
 import {
@@ -22,14 +23,32 @@ import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Textarea } from "./ui/textarea";
 
-function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
+function CommentDialog({ interviewId }: { interviewId: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [comment, setComment] = useState("");
   const [rating, setRating] = useState("3");
+  const [users, setUsers] = useState<any[]>([]);
+  const [existingComments, setExistingComments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const addComment = useMutation(api.comments.addComment);
-  const users = useQuery(api.users.getUsers);
-  const existingComments = useQuery(api.comments.getComments, { interviewId });
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [usersData, commentsData] = await Promise.all([
+          getUsers(),
+          getComments(interviewId),
+        ]);
+        setUsers(usersData);
+        setExistingComments(commentsData);
+      } catch (error) {
+        console.error("Failed to fetch data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [interviewId]);
 
   const handleSubmit = async () => {
     if (!comment.trim()) return toast.error("Please enter comment");
@@ -40,6 +59,10 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
         content: comment.trim(),
         rating: parseInt(rating),
       });
+
+      // Refresh comments
+      const updatedComments = await getComments(interviewId);
+      setExistingComments(updatedComments);
 
       toast.success("Comment submitted");
       setComment("");
@@ -61,7 +84,7 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
     </div>
   );
 
-  if (existingComments === undefined || users === undefined) return null;
+  if (loading) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -103,9 +126,9 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
                             </Avatar>
                             <div>
                               <p className="text-sm font-medium">{interviewer.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {format(comment._creationTime, "MMM d, yyyy • h:mm a")}
-                              </p>
+                            <p className="text-xs text-muted-foreground">
+                              {format(new Date(comment.created_at), "MMM d, yyyy • h:mm a")}
+                            </p>
                             </div>
                           </div>
                           {renderStars(comment.rating)}

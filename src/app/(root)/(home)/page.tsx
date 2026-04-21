@@ -1,24 +1,41 @@
-"use client";
+'use client';
 
 import ActionCard from "@/components/ActionCard";
 import { QUICK_ACTIONS } from "@/constants";
 import { useUserRole } from "@/hooks/useUserRole";
-import { useQuery } from "convex/react";
-import { useState } from "react";
-import { api } from "../../../../convex/_generated/api";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import MeetingModal from "@/components/MeetingModal";
 import LoaderUI from "@/components/LoaderUI";
 import { Loader2Icon } from "lucide-react";
 import MeetingCard from "@/components/MeetingCard";
+import { getMyInterviews } from "@/lib/actions/interview";
 
 export default function Home() {
   const router = useRouter();
 
   const { isInterviewer, isCandidate, isLoading } = useUserRole();
-  const interviews = useQuery(api.interviews.getMyInterviews);
+  const [interviews, setInterviews] = useState<any[]>([]);
+  const [interviewsLoading, setInterviewsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState<"start" | "join">();
+
+  useEffect(() => {
+    const fetchInterviews = async () => {
+      try {
+        const data = await getMyInterviews();
+        setInterviews(data);
+      } catch (error) {
+        console.error("Failed to fetch interviews:", error);
+      } finally {
+        setInterviewsLoading(false);
+      }
+    };
+
+    if (!isLoading) {
+      fetchInterviews();
+    }
+  }, [isLoading]);
 
   const handleQuickAction = (title: string) => {
     switch (title) {
@@ -78,14 +95,14 @@ export default function Home() {
           </div>
 
           <div className="mt-8">
-            {interviews === undefined ? (
+            {interviewsLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : interviews.length > 0 ? (
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {interviews.map((interview) => (
-                  <MeetingCard key={interview._id} interview={interview} />
+                  <MeetingCard key={interview.id} interview={interview} />
                 ))}
               </div>
             ) : (

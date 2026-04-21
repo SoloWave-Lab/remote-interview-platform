@@ -1,8 +1,6 @@
-"use client";
+'use client';
 
-import { useMutation, useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
-import { Doc, Id } from "../../../../convex/_generated/dataModel";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import LoaderUI from "@/components/LoaderUI";
 import { getCandidateInfo, groupInterviews } from "@/lib/utils";
@@ -15,24 +13,49 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CalendarIcon, CheckCircle2Icon, ClockIcon, XCircleIcon } from "lucide-react";
 import { format } from "date-fns";
 import CommentDialog from "@/components/CommentDialog";
+import { getAllInterviews, updateInterviewStatus } from "@/lib/actions/interview";
+import { getUsers } from "@/lib/actions/user";
 
-type Interview = Doc<"interviews">;
+type Interview = any;
 
 function DashboardPage() {
-  const users = useQuery(api.users.getUsers);
-  const interviews = useQuery(api.interviews.getAllInterviews);
-  const updateStatus = useMutation(api.interviews.updateInterviewStatus);
+  const [users, setUsers] = useState<any[]>([]);
+  const [interviews, setInterviews] = useState<Interview[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleStatusUpdate = async (interviewId: Id<"interviews">, status: string) => {
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [usersData, interviewsData] = await Promise.all([
+          getUsers(),
+          getAllInterviews(),
+        ]);
+        setUsers(usersData);
+        setInterviews(interviewsData);
+      } catch (error) {
+        console.error("Failed to fetch data:", error);
+        toast.error("Failed to load interviews");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const handleStatusUpdate = async (interviewId: string, status: string) => {
     try {
-      await updateStatus({ id: interviewId, status });
+      await updateInterviewStatus(interviewId, status);
       toast.success(`Interview marked as ${status}`);
+      // Refresh interviews
+      const updatedInterviews = await getAllInterviews();
+      setInterviews(updatedInterviews);
     } catch (error) {
       toast.error("Failed to update status");
     }
   };
 
-  if (!interviews || !users) return <LoaderUI />;
+  if (loading) return <LoaderUI />;
 
   const groupedInterviews = groupInterviews(interviews);
 
@@ -57,8 +80,8 @@ function DashboardPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {groupedInterviews[category.id].map((interview: Interview) => {
-                    const candidateInfo = getCandidateInfo(users, interview.candidateId);
-                    const startTime = new Date(interview.startTime);
+                    const candidateInfo = getCandidateInfo(users, interview.candidate_id);
+                    const startTime = new Date(interview.start_time);
 
                     return (
                       <Card className="hover:shadow-md transition-all">
@@ -96,7 +119,7 @@ function DashboardPage() {
                             <div className="flex gap-2 w-full">
                               <Button
                                 className="flex-1"
-                                onClick={() => handleStatusUpdate(interview._id, "succeeded")}
+                                onClick={() => handleStatusUpdate(interview.id, "succeeded")}
                               >
                                 <CheckCircle2Icon className="h-4 w-4 mr-2" />
                                 Pass
@@ -104,14 +127,14 @@ function DashboardPage() {
                               <Button
                                 variant="destructive"
                                 className="flex-1"
-                                onClick={() => handleStatusUpdate(interview._id, "failed")}
+                                onClick={() => handleStatusUpdate(interview.id, "failed")}
                               >
                                 <XCircleIcon className="h-4 w-4 mr-2" />
                                 Fail
                               </Button>
                             </div>
                           )}
-                          <CommentDialog interviewId={interview._id} />
+                          <CommentDialog interviewId={interview.id} />
                         </CardFooter>
                       </Card>
                     );

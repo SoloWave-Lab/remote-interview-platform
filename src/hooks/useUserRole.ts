@@ -1,19 +1,37 @@
-import { useUser } from "@clerk/nextjs";
-import { useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
+'use client';
+
+import { useAuth } from "@/lib/auth-context";
+import { useEffect, useState } from "react";
+import { getUserRole } from "@/lib/actions/user";
 
 export const useUserRole = () => {
-  const { user } = useUser();
+  const { user } = useAuth();
+  const [roleData, setRoleData] = useState<{ isInterviewer: boolean; isCandidate: boolean } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const userData = useQuery(api.users.getUserByClerkId, {
-    clerkId: user?.id || "",
-  });
+  useEffect(() => {
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
 
-  const isLoading = userData === undefined;
+    const fetchRole = async () => {
+      try {
+        const role = await getUserRole(user.id);
+        setRoleData(role);
+      } catch (error) {
+        console.error("Failed to fetch user role:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchRole();
+  }, [user]);
 
   return {
     isLoading,
-    isInterviewer: userData?.role === "interviewer",
-    isCandidate: userData?.role === "candidate",
+    isInterviewer: roleData?.isInterviewer ?? false,
+    isCandidate: roleData?.isCandidate ?? false,
   };
 };

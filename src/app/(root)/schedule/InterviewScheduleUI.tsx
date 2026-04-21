@@ -1,9 +1,11 @@
-import { useUser } from "@clerk/nextjs";
+'use client';
+
 import { useStreamVideoClient } from "@stream-io/video-react-sdk";
-import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
-import { api } from "../../../../convex/_generated/api";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import { useAuth } from "@/lib/auth-context";
+import { getAllInterviews, createInterview, addInterviewInterviewer } from "@/lib/actions/interview";
+import { getUsers } from "@/lib/actions/user";
 import {
   Dialog,
   DialogHeader,
@@ -29,16 +31,34 @@ import MeetingCard from "@/components/MeetingCard";
 
 function InterviewScheduleUI() {
   const client = useStreamVideoClient();
-  const { user } = useUser();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [interviews, setInterviews] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const interviews = useQuery(api.interviews.getAllInterviews) ?? [];
-  const users = useQuery(api.users.getUsers) ?? [];
-  const createInterview = useMutation(api.interviews.createInterview);
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [interviewsData, usersData] = await Promise.all([
+          getAllInterviews(),
+          getUsers(),
+        ]);
+        setInterviews(interviewsData);
+        setUsers(usersData);
+      } catch (error) {
+        console.error("Failed to fetch data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const candidates = users?.filter((u) => u.role === "candidate");
-  const interviewers = users?.filter((u) => u.role === "interviewer");
+    fetchData();
+  }, []);
+
+  const candidates = users.filter((u) => u.role === "candidate");
+  const interviewers = users.filter((u) => u.role === "interviewer");
 
   const [formData, setFormData] = useState({
     title: "",
@@ -77,15 +97,23 @@ function InterviewScheduleUI() {
         },
       });
 
-      await createInterview({
+      const interview = await createInterview({
         title,
-        description,
-        startTime: meetingDate.getTime(),
-        status: "upcoming",
-        streamCallId: id,
         candidateId,
-        interviewerIds,
+        startTime: meetingDate.toISOString(),
+        streamCallId: id,
       });
+
+      // Add interviewers
+      for (const interviewerId of interviewerIds) {
+        if (interviewerId !== user.id) {
+          await addInterviewInterviewer(interview.id, interviewerId);
+        }
+      }
+
+      // Refresh interviews
+      const updatedInterviews = await getAllInterviews();
+      setInterviews(updatedInterviews);
 
       setOpen(false);
       toast.success("Meeting scheduled successfully!");
@@ -124,11 +152,11 @@ function InterviewScheduleUI() {
   };
 
   const selectedInterviewers = interviewers.filter((i) =>
-    formData.interviewerIds.includes(i.clerkId)
+    formData.interviewerIds.includes(i.id)
   );
 
   const availableInterviewers = interviewers.filter(
-    (i) => !formData.interviewerIds.includes(i.clerkId)
+    (i) => !formData.interviewerIds.includes(i.id)
   );
 
   return (
@@ -185,7 +213,7 @@ function InterviewScheduleUI() {
                   </SelectTrigger>
                   <SelectContent>
                     {candidates.map((candidate) => (
-                      <SelectItem key={candidate.clerkId} value={candidate.clerkId}>
+                      <SelectItem key={candidate.id} value={candidate.id}>
                         <UserInfo user={candidate} />
                       </SelectItem>
                     ))}
@@ -199,13 +227,13 @@ function InterviewScheduleUI() {
                 <div className="flex flex-wrap gap-2 mb-2">
                   {selectedInterviewers.map((interviewer) => (
                     <div
-                      key={interviewer.clerkId}
+                      key={interviewer.id}
                       className="inline-flex items-center gap-2 bg-secondary px-2 py-1 rounded-md text-sm"
                     >
                       <UserInfo user={interviewer} />
-                      {interviewer.clerkId !== user?.id && (
+                      {interviewer.id !== user?.id && (
                         <button
-                          onClick={() => removeInterviewer(interviewer.clerkId)}
+                          onClick={() => removeInterviewer(interviewer.id)}
                           className="hover:text-destructive transition-colors"
                         >
                           <XIcon className="h-4 w-4" />
@@ -221,7 +249,7 @@ function InterviewScheduleUI() {
                     </SelectTrigger>
                     <SelectContent>
                       {availableInterviewers.map((interviewer) => (
-                        <SelectItem key={interviewer.clerkId} value={interviewer.clerkId}>
+                        <SelectItem key={interviewer.id} value={interviewer.id}>
                           <UserInfo user={interviewer} />
                         </SelectItem>
                       ))}
@@ -288,7 +316,7 @@ function InterviewScheduleUI() {
       </div>
 
       {/* LOADING STATE & MEETING CARDS */}
-      {!interviews ? (
+      {loading ? (
         <div className="flex justify-center py-12">
           <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
         </div>
@@ -296,7 +324,7 @@ function InterviewScheduleUI() {
         <div className="spacey-4">
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {interviews.map((interview) => (
-              <MeetingCard key={interview._id} interview={interview} />
+              <MeetingCard key={interview.id} interview={interview} />
             ))}
           </div>
         </div>

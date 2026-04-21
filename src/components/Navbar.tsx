@@ -1,10 +1,21 @@
+'use client';
+
 import Link from "next/link";
 import { ModeToggle } from "./ModeToggle";
 import { CodeIcon } from "lucide-react";
-import { SignedIn, UserButton } from "@clerk/nextjs";
 import DasboardBtn from "./DasboardBtn";
+import { useAuth } from "@/lib/auth-context";
+import { useRouter } from "next/navigation";
 
 function Navbar() {
+  const { user, signOut } = useAuth();
+  const router = useRouter();
+
+  async function handleLogout() {
+    await signOut();
+    router.push('/login');
+  }
+
   return (
     <nav className="border-b">
       <div className="flex h-16 items-center px-4 container mx-auto">
@@ -20,13 +31,21 @@ function Navbar() {
         </Link>
 
         {/* RIGHT SIDE - ACTIONS */}
-        <SignedIn>
+        {user && (
           <div className="flex items-center space-x-4 ml-auto">
             <DasboardBtn />
             <ModeToggle />
-            <UserButton />
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-600">{user.name}</span>
+              <button
+                onClick={handleLogout}
+                className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded hover:bg-red-700"
+              >
+                Logout
+              </button>
+            </div>
           </div>
-        </SignedIn>
+        )}
       </div>
     </nav>
   );
